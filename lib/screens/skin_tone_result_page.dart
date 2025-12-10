@@ -181,27 +181,32 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
             ),
             const SizedBox(height: 16),
 
-            // Lab Values
+            // Lab Values with explanation
             _ResultCard(
               title: 'Lab Color Space',
               children: [
                 _ResultRow(
                   label: 'L* (Lightness)',
                   value: lab['L']!.toStringAsFixed(2),
+                  description: 'Range: 0-100 (black to white)',
                 ),
+                const Divider(height: 16),
                 _ResultRow(
                   label: 'a* (Green-Red)',
                   value: lab['a']!.toStringAsFixed(2),
+                  description: 'Negative=Green, Positive=Red',
                 ),
+                const Divider(height: 16),
                 _ResultRow(
                   label: 'b* (Blue-Yellow)',
                   value: lab['b']!.toStringAsFixed(2),
+                  description: 'Negative=Blue, Positive=Yellow',
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
-            // Melanin Index
+            // Melanin Index with scale visualization
             AppCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -213,6 +218,8 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
+                  
+                  // Large melanin index display
                   Center(
                     child: Container(
                       padding: const EdgeInsets.symmetric(
@@ -252,10 +259,54 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // Melanin scale visualization
+                  _buildMelaninScale(context, widget.melaninIndex),
+                  const SizedBox(height: 16),
+
                   Text(
-                    'This index represents the melanin concentration in your skin and will be used to calibrate glucose readings for improved accuracy.',
+                    'Understanding Your Melanin Index:',
+                    style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildMelaninScaleItem(
+                        context,
+                        'Very Light (0-20)',
+                        'Fair, light complexion',
+                      ),
+                      _buildMelaninScaleItem(
+                        context,
+                        'Light (20-35)',
+                        'Light to medium-light',
+                      ),
+                      _buildMelaninScaleItem(
+                        context,
+                        'Medium (35-55)',
+                        'Medium to olive',
+                      ),
+                      _buildMelaninScaleItem(
+                        context,
+                        'Deep (55-75)',
+                        'Brown to deep brown',
+                      ),
+                      _buildMelaninScaleItem(
+                        context,
+                        'Very Deep (75-100)',
+                        'Very dark brown to black',
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    'This index will calibrate glucose readings to account for skin tone variations in optical measurements.',
                     style: Theme.of(context).textTheme.bodySmall?.copyWith(
                       color: Colors.grey.shade600,
+                      fontStyle: FontStyle.italic,
                     ),
                   ),
                 ],
@@ -263,14 +314,132 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
             ),
             const SizedBox(height: 32),
 
-            // Save button
+            // Save button with enhanced styling
             PrimaryButton(
-              label: 'Save to Profile',
+              label: _isSaving ? 'Saving...' : 'Save Calibration',
               isLoading: _isSaving,
               onPressed: _saveSkinTone,
             ),
+            const SizedBox(height: 16),
+            Text(
+              'Your skin tone profile will be saved and used to optimize glucose monitoring accuracy.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey,
+              ),
+              textAlign: TextAlign.center,
+            ),
           ],
         ),
+      ),
+    );
+  }
+
+  /// Build melanin scale visualization bar
+  Widget _buildMelaninScale(BuildContext context, double value) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Melanin Scale',
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            fontWeight: FontWeight.bold,
+            color: Colors.grey.shade600,
+          ),
+        ),
+        const SizedBox(height: 8),
+        Container(
+          height: 40,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(8),
+            gradient: const LinearGradient(
+              colors: [
+                Color(0xFFFFD7BE), // Very light
+                Color(0xFFC39B6B), // Light
+                Color(0xFF8B7355), // Medium
+                Color(0xFF5D4E37), // Deep
+                Color(0xFF2A1810), // Very deep
+              ],
+            ),
+            border: Border.all(
+              color: Colors.grey.shade300,
+              width: 1,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                left: (value / 100) * 100 + '%'.length.toDouble() - 5,
+                top: 0,
+                bottom: 0,
+                child: Center(
+                  child: Container(
+                    width: 2,
+                    color: Colors.black,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              '0',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey.shade500,
+              ),
+            ),
+            Text(
+              '100',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Colors.grey.shade500,
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  /// Build melanin scale explanation item
+  Widget _buildMelaninScaleItem(
+    BuildContext context,
+    String range,
+    String description,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Text(
+            '•',
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  range,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                Text(
+                  description,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey.shade600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
