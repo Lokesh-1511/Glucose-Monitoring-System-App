@@ -480,33 +480,47 @@ class _ResultCard extends StatelessWidget {
 class _ResultRow extends StatelessWidget {
   final String label;
   final String value;
+  final String? description;
 
   const _ResultRow({
     Key? key,
     required this.label,
     required this.value,
+    this.description,
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Text(
-            label,
-            style: Theme.of(context).textTheme.bodyMedium,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: Theme.of(context).textTheme.bodyMedium,
+              ),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  fontWeight: FontWeight.bold,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            ],
           ),
+        ),
+        if (description != null)
           Text(
-            value,
-            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
+            description!,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Colors.grey.shade500,
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
