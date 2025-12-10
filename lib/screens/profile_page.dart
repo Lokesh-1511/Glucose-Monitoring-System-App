@@ -54,7 +54,12 @@ class _ProfilePageState extends State<ProfilePage> {
             _ageController.text = profile.age.toString();
             _heightController.text = profile.height.toString();
             _weightController.text = profile.weight.toString();
-            _selectedGender = profile.gender;
+            // Ensure gender value matches dropdown options
+            if (profile.gender == 'Male' || profile.gender == 'Female' || profile.gender == 'Other') {
+              _selectedGender = profile.gender;
+            } else {
+              _selectedGender = 'Male'; // Default if invalid value
+            }
           }
           _isLoading = false;
         });
