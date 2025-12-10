@@ -43,19 +43,30 @@ class _ProfilePageState extends State<ProfilePage> {
 
   /// Load existing profile from storage
   Future<void> _loadProfile() async {
-    await _storageService.init();
-    final profile = _storageService.loadUserProfile();
+    try {
+      await _storageService.init();
+      final profile = _storageService.loadUserProfile();
 
-    setState(() {
-      if (profile != null) {
-        _nameController.text = profile.name;
-        _ageController.text = profile.age.toString();
-        _heightController.text = profile.height.toString();
-        _weightController.text = profile.weight.toString();
-        _selectedGender = profile.gender;
+      if (mounted) {
+        setState(() {
+          if (profile != null) {
+            _nameController.text = profile.name;
+            _ageController.text = profile.age.toString();
+            _heightController.text = profile.height.toString();
+            _weightController.text = profile.weight.toString();
+            _selectedGender = profile.gender;
+          }
+          _isLoading = false;
+        });
       }
-      _isLoading = false;
-    });
+    } catch (e) {
+      debugPrint('Error loading profile: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
   }
 
   /// Save profile to storage

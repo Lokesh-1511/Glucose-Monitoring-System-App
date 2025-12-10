@@ -9,18 +9,30 @@ class DataStorageService {
   static const String _glucoseReadingsKey = 'glucose_readings';
   static const String _lastGlucoseKey = 'last_glucose_reading';
 
-  late SharedPreferences _prefs;
+  SharedPreferences? _prefs;
+  bool _initialized = false;
 
   /// Initialize the storage service
   Future<void> init() async {
-    _prefs = await SharedPreferences.getInstance();
+    if (!_initialized) {
+      _prefs = await SharedPreferences.getInstance();
+      _initialized = true;
+    }
+  }
+
+  /// Ensure initialized before operations
+  void _ensureInitialized() {
+    if (!_initialized || _prefs == null) {
+      throw Exception('DataStorageService not initialized. Call init() first.');
+    }
   }
 
   /// Save user profile to local storage
   Future<bool> saveUserProfile(UserProfile profile) async {
     try {
+      _ensureInitialized();
       final json = jsonEncode(profile.toJson());
-      return await _prefs.setString(_userProfileKey, json);
+      return await _prefs!.setString(_userProfileKey, json);
     } catch (e) {
       print('Error saving user profile: $e');
       return false;
@@ -30,7 +42,8 @@ class DataStorageService {
   /// Load user profile from local storage
   UserProfile? loadUserProfile() {
     try {
-      final json = _prefs.getString(_userProfileKey);
+      _ensureInitialized();
+      final json = _prefs!.getString(_userProfileKey);
       if (json == null) return null;
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       return UserProfile.fromJson(decoded);
@@ -43,12 +56,13 @@ class DataStorageService {
   /// Save a glucose reading to history
   Future<bool> saveGlucoseReading(GlucoseReading reading) async {
     try {
+      _ensureInitialized();
       // Save individual reading
       final json = jsonEncode(reading.toJson());
-      await _prefs.setString(_lastGlucoseKey, json);
+      await _prefs!.setString(_lastGlucoseKey, json);
 
       // Add to history list
-      final List<String> readings = _prefs.getStringList(_glucoseReadingsKey) ?? [];
+      final List<String> readings = _prefs!.getStringList(_glucoseReadingsKey) ?? [];
       readings.add(json);
       
       // Keep only last 1000 readings
@@ -56,7 +70,7 @@ class DataStorageService {
         readings.removeAt(0);
       }
       
-      return await _prefs.setStringList(_glucoseReadingsKey, readings);
+      return await _prefs!.setStringList(_glucoseReadingsKey, readings);
     } catch (e) {
       print('Error saving glucose reading: $e');
       return false;
@@ -66,7 +80,8 @@ class DataStorageService {
   /// Get all glucose readings from history
   List<GlucoseReading> getAllGlucoseReadings() {
     try {
-      final List<String>? readingsJson = _prefs.getStringList(_glucoseReadingsKey);
+      _ensureInitialized();
+      final List<String>? readingsJson = _prefs!.getStringList(_glucoseReadingsKey);
       if (readingsJson == null || readingsJson.isEmpty) return [];
       
       return readingsJson
@@ -81,7 +96,8 @@ class DataStorageService {
   /// Get last glucose reading
   GlucoseReading? getLastGlucoseReading() {
     try {
-      final json = _prefs.getString(_lastGlucoseKey);
+      _ensureInitialized();
+      final json = _prefs!.getString(_lastGlucoseKey);
       if (json == null) return null;
       final decoded = jsonDecode(json) as Map<String, dynamic>;
       return GlucoseReading.fromJson(decoded);
@@ -93,6 +109,7 @@ class DataStorageService {
 
   /// Clear all data (for testing)
   Future<bool> clearAll() async {
-    return await _prefs.clear();
+    _ensureInitialized();
+    return await _prefs!.clear();
   }
 }
