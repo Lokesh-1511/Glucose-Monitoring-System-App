@@ -1,9 +1,6 @@
 import 'package:flutter/material.dart';
 import '../widgets/glucose_gauge.dart';
 import '../widgets/common_widgets.dart';
-import 'history_page.dart';
-import 'profile_page.dart';
-import 'device_connection_page.dart';
 import 'dart:math';
 
 /// Home dashboard displaying current glucose level and navigation options
@@ -251,62 +248,7 @@ class _HomeDashboardState extends State<HomeDashboard> {
             ),
             const SizedBox(height: 40),
 
-            // Navigation section
-            Text(
-              'Quick Access',
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 16),
-
-            // Grid of navigation buttons with icons
-            GridView.count(
-              crossAxisCount: 2,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisSpacing: 12,
-              mainAxisSpacing: 12,
-              children: [
-                _NavCard(
-                  icon: Icons.history,
-                  label: 'History',
-                  description: 'View trends',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const HistoryPage()),
-                  ),
-                ),
-                _NavCard(
-                  icon: Icons.person,
-                  label: 'Profile',
-                  description: 'Calibrate',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const ProfilePage()),
-                  ),
-                ),
-                _NavCard(
-                  icon: Icons.bluetooth_connected,
-                  label: 'BLE Device',
-                  description: 'Connect',
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                        builder: (_) => const DeviceConnectionPage()),
-                  ),
-                ),
-                _NavCard(
-                  icon: Icons.settings,
-                  label: 'Settings',
-                  description: 'Configure',
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Settings coming soon')),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 8),
           ],
         ),
       ),
@@ -328,70 +270,4 @@ class _HomeDashboardState extends State<HomeDashboard> {
 }
 
 /// Navigation card widget for quick access to different screens
-class _NavCard extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final String? description;
-  final VoidCallback onTap;
-
-  const _NavCard({
-    Key? key,
-    required this.icon,
-    required this.label,
-    this.description,
-    required this.onTap,
-  }) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Material(
-      color: Colors.transparent,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Container(
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: Colors.grey.shade200,
-              width: 1,
-            ),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(0.05),
-                blurRadius: 10,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                icon,
-                size: 40,
-                color: Theme.of(context).colorScheme.primary,
-              ),
-              const SizedBox(height: 12),
-              Text(
-                label,
-                style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              if (description != null) ...[
-                const SizedBox(height: 4),
-                Text(
-                  description!,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-}
+// Quick Access cards removed in favor of bottom navigation

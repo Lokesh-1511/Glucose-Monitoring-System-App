@@ -108,6 +108,7 @@ class _HistoryPageState extends State<HistoryPage>
     return Scaffold(
       appBar: AppTopBar(
         title: 'Glucose History',
+        showBackButton: false,
       ),
       body: Column(
         children: [

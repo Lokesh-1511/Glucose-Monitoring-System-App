@@ -133,13 +133,13 @@ class _ProfilePageState extends State<ProfilePage> {
   Widget build(BuildContext context) {
     if (_isLoading) {
       return Scaffold(
-        appBar: AppTopBar(title: 'User Profile'),
+        appBar: AppTopBar(title: 'User Profile', showBackButton: false),
         body: const Center(child: CircularProgressIndicator()),
       );
     }
 
     return Scaffold(
-      appBar: AppTopBar(title: 'User Profile'),
+      appBar: AppTopBar(title: 'User Profile', showBackButton: false),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(

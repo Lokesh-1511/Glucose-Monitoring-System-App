@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
 import 'dart:ui' as ui;
+import 'dart:math' as math;
 import '../widgets/common_widgets.dart';
 import 'skin_tone_result_page.dart';
+import 'skin_tone_capture_page.dart';
 
 /// Second screen in skin tone calibration flow
 /// Allows adjustment of brightness, saturation, and hue using HSV color space
@@ -36,6 +38,69 @@ class _SkinToneAdjustPageState extends State<SkinToneAdjustPage> {
   double _hue = 0.0; // 0 to 360
   double _saturation = 1.0; // 0 to 2
   double _brightness = 0.0; // -100 to 100
+  
+  Color? _baseAverageColor; // average color sampled from captured image
+  bool _loadingImage = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _initPreviewImage();
+  }
+
+  Future<void> _initPreviewImage() async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        widget.imageBytes,
+        targetWidth: 200,
+      );
+      final fi = await codec.getNextFrame();
+      final img = fi.image;
+      final avg = await _computeAverageColor(img);
+      if (mounted) {
+        setState(() {
+          _baseAverageColor = avg;
+          _loadingImage = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _loadingImage = false);
+      }
+    }
+  }
+
+  Future<Color> _computeAverageColor(ui.Image image) async {
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return const Color(0xFFD2B48C); // fallback tan
+    final bytes = byteData.buffer.asUint8List();
+    final width = image.width;
+    final height = image.height;
+    final startX = (width * 0.25).floor();
+    final startY = (height * 0.25).floor();
+    final endX = (width * 0.75).floor();
+    final endY = (height * 0.75).floor();
+    int rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (int y = startY; y < endY; y += 2) {
+      for (int x = startX; x < endX; x += 2) {
+        final idx = (y * width + x) * 4;
+        final r = bytes[idx];
+        final g = bytes[idx + 1];
+        final b = bytes[idx + 2];
+        rSum += r;
+        gSum += g;
+        bSum += b;
+        count++;
+      }
+    }
+    if (count == 0) return const Color(0xFFD2B48C);
+    return Color.fromARGB(
+      255,
+      (rSum / count).round(),
+      (gSum / count).round(),
+      (bSum / count).round(),
+    );
+  }
 
   // Skin tone presets (common ethnic skin tones)
   late final List<_SkinTonePreset> _skinTonePresets = [
@@ -71,45 +136,34 @@ class _SkinToneAdjustPageState extends State<SkinToneAdjustPage> {
     ),
   ];
 
-  /// Get adjusted color based on HSV sliders with proper color math
-  Color _getAdjustedColor() {
-    // Base skin tone color
-    int r = 210, g = 180, b = 140;
-
-    // Convert RGB to HSV
-    double rn = r / 255.0;
-    double gn = g / 255.0;
-    double bn = b / 255.0;
-
-    double maxc = [rn, gn, bn].reduce((a, b) => a > b ? a : b);
-    double minc = [rn, gn, bn].reduce((a, b) => a < b ? a : b);
-    double v = maxc;
-
-    if (minc == maxc) {
-      return _hsvaToColor(0, 0, v + (_brightness / 100.0), 1.0);
-    }
-
-    double s = (maxc - minc) / maxc;
-    double rc = (maxc - rn) / (maxc - minc);
-    double gc = (maxc - gn) / (maxc - minc);
-    double bc = (maxc - bn) / (maxc - minc);
-
+  /// Convert RGB color to HSV and apply adjustments
+  Color _applyHsvAdjustments(Color base) {
+    double r = base.red / 255.0;
+    double g = base.green / 255.0;
+    double b = base.blue / 255.0;
+    final maxc = [r, g, b].reduce((a, b) => a > b ? a : b);
+    final minc = [r, g, b].reduce((a, b) => a < b ? a : b);
     double h = 0.0;
-    if (rn == maxc) {
-      h = bc - gc;
-    } else if (gn == maxc) {
-      h = 2.0 + rc - bc;
-    } else {
-      h = 4.0 + gc - rc;
+    double s = maxc == 0 ? 0.0 : (maxc - minc) / maxc;
+    final v = maxc;
+    if (minc != maxc) {
+      final rc = (maxc - r) / (maxc - minc);
+      final gc = (maxc - g) / (maxc - minc);
+      final bc = (maxc - b) / (maxc - minc);
+      if (r == maxc) {
+        h = bc - gc;
+      } else if (g == maxc) {
+        h = 2.0 + rc - bc;
+      } else {
+        h = 4.0 + gc - rc;
+      }
+      h = (h / 6.0) % 1.0;
     }
-    h = (h / 6.0) % 1.0;
-
     // Apply adjustments
-    h = (h * 360 + _hue) % 360;
-    s = (s * _saturation).clamp(0.0, 1.0);
-    v = (v + (_brightness / 100.0)).clamp(0.0, 1.0);
-
-    return _hsvaToColor(h, s, v, 1.0);
+    final newH = ((h * 360.0 + _hue) % 360.0);
+    final newS = (s * _saturation).clamp(0.0, 1.0);
+    final newV = (v + (_brightness / 100.0)).clamp(0.0, 1.0);
+    return _hsvaToColor(newH, newS, newV, 1.0);
   }
 
   /// Convert HSVA to RGBA Color
@@ -164,20 +218,23 @@ class _SkinToneAdjustPageState extends State<SkinToneAdjustPage> {
     );
   }
 
-  /// Calculate melanin index from RGB using dermatology formula
+  /// Calculate melanin index from adjusted image average color
   double _calculateMelaninIndex() {
-    final color = _getAdjustedColor();
+    final base = _baseAverageColor ?? const Color(0xFFD2B48C);
+    final color = _applyHsvAdjustments(base);
     final r = color.red / 255.0;
     final g = color.green / 255.0;
     final b = color.blue / 255.0;
-
-    // Luminance calculation using standard RGB weights
-    final y = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    if (y <= 0.0001) return 0;
-
-    // Melanin Index (MI) formula: MI = 100 * ln(1/Y)
-    final melaninIndex = 100 * (-y.log());
-    return melaninIndex.clamp(0, 100);
+    final y = 0.2126 * r + 0.7152 * g + 0.0722 * b; // luminance
+    // Avoid log(0)
+    final safeY = y.clamp(0.0001, 0.9999);
+    // Raw melanin index (unbounded)
+    final miRaw = -100.0 * math.log(safeY);
+    // Normalize to 0..100 using a practical range (bright ~10, dark ~300)
+    const miMin = 10.0;
+    const miMax = 300.0;
+    final miNorm = ((miRaw - miMin) / (miMax - miMin) * 100.0).clamp(0.0, 100.0);
+    return miNorm;
   }
 
   /// Apply skin tone preset
@@ -215,7 +272,6 @@ class _SkinToneAdjustPageState extends State<SkinToneAdjustPage> {
 
   @override
   Widget build(BuildContext context) {
-    final adjustedColor = _getAdjustedColor();
     final melaninIndex = _calculateMelaninIndex();
 
     return Scaffold(
@@ -231,23 +287,30 @@ class _SkinToneAdjustPageState extends State<SkinToneAdjustPage> {
             Center(
               child: Column(
                 children: [
-                  Container(
-                    width: 150,
-                    height: 150,
-                    decoration: BoxDecoration(
-                      color: adjustedColor,
+                  AspectRatio(
+                    aspectRatio: 1,
+                    child: ClipRRect(
                       borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 10,
-                        ),
-                      ],
+                      child: _loadingImage
+                          ? const Center(child: CircularProgressIndicator())
+                          : ColorFiltered(
+                              colorFilter: ColorFilter.matrix(
+                                _composeColorMatrix(
+                                  hueDegrees: _hue,
+                                  saturationScale: _saturation,
+                                  brightnessPercent: _brightness,
+                                ),
+                              ),
+                              child: Image.memory(
+                                widget.imageBytes,
+                                fit: BoxFit.cover,
+                              ),
+                            ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Live Skin Tone Preview',
+                    'Live Skin Image Preview',
                     style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       color: Colors.grey,
                     ),
@@ -417,17 +480,86 @@ class _SkinToneAdjustPageState extends State<SkinToneAdjustPage> {
                 context,
                 MaterialPageRoute(
                   builder: (_) => SkinToneResultPage(
-                    color: adjustedColor,
+                    imageBytes: widget.imageBytes,
+                    hue: _hue,
+                    saturation: _saturation,
+                    brightness: _brightness,
                     melaninIndex: melaninIndex,
                   ),
                 ),
               ),
+            ),
+            const SizedBox(height: 12),
+            // Discard & Retake button
+            SecondaryButton(
+              label: 'Discard & Retake',
+              height: 48,
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SkinToneCapturePage(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
           ],
         ),
       ),
     );
+  }
+
+  // Compose color filter matrix for hue, saturation and brightness
+  List<double> _composeColorMatrix({
+    required double hueDegrees,
+    required double saturationScale,
+    required double brightnessPercent,
+  }) {
+    final h = hueDegrees * math.pi / 180.0;
+    final cosH = math.cos(h);
+    final sinH = math.sin(h);
+    const rW = 0.213, gW = 0.715, bW = 0.072;
+    final hue = <double>[
+      rW + cosH * (1 - rW) + sinH * (-rW), gW + cosH * (-gW) + sinH * (-gW), bW + cosH * (-bW) + sinH * (1 - bW), 0, 0,
+      rW + cosH * (-rW) + sinH * (0.143), gW + cosH * (1 - gW) + sinH * (0.140), bW + cosH * (-bW) + sinH * (-0.283), 0, 0,
+      rW + cosH * (-rW) + sinH * (-(1 - rW)), gW + cosH * (-gW) + sinH * (gW), bW + cosH * (1 - bW) + sinH * (bW), 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+
+    final s = saturationScale;
+    final sat = <double>[
+      rW * (1 - s) + s, gW * (1 - s), bW * (1 - s), 0, 0,
+      rW * (1 - s), gW * (1 - s) + s, bW * (1 - s), 0, 0,
+      rW * (1 - s), gW * (1 - s), bW * (1 - s) + s, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+
+    final v = 1.0 + (brightnessPercent / 100.0);
+    final bright = <double>[
+      v, 0, 0, 0, 0,
+      0, v, 0, 0, 0,
+      0, 0, v, 0, 0,
+      0, 0, 0, 1, 0,
+    ];
+
+    return _multiplyColorMatrices(_multiplyColorMatrices(bright, sat), hue);
+  }
+
+  List<double> _multiplyColorMatrices(List<double> a, List<double> b) {
+    // a and b are 4x5 matrices in row-major (20 elements)
+    final out = List<double>.filled(20, 0);
+    for (int row = 0; row < 4; row++) {
+      for (int col = 0; col < 5; col++) {
+        double sum = 0;
+        for (int k = 0; k < 4; k++) {
+          sum += a[row * 5 + k] * b[k * 5 + col];
+        }
+        if (col == 4) sum += a[row * 5 + 4];
+        out[row * 5 + col] = sum;
+      }
+    }
+    return out;
   }
 }
 
@@ -494,11 +626,4 @@ class _SliderControl extends StatelessWidget {
   }
 }
 
-extension on double {
-  double log() {
-    // Natural logarithm using Dart's built-in
-    return double.parse(
-      'NaN', // Placeholder - use standard library
-    );
-  }
-}
+// Removed broken log extension; using dart:math.log instead

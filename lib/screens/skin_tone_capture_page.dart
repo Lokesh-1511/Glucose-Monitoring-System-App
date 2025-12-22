@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:camera/camera.dart';
 import '../widgets/common_widgets.dart';
 import 'skin_tone_adjust_page.dart';
@@ -43,6 +44,10 @@ class _SkinToneCaptureCapturePageState extends State<SkinToneCapturePage> {
         );
 
         await _cameraController?.initialize();
+        // Ensure flash is disabled; user prefers no flash
+        try {
+          await _cameraController?.setFlashMode(FlashMode.off);
+        } catch (_) {}
         if (mounted) {
           setState(() {
             _cameraReady = true;
@@ -67,6 +72,11 @@ class _SkinToneCaptureCapturePageState extends State<SkinToneCapturePage> {
       if (_cameraController != null) {
         final image = await _cameraController!.takePicture();
         final imageBytes = await image.readAsBytes();
+
+        // Stop camera after capture
+        await _cameraController?.dispose();
+        _cameraController = null;
+        _cameraReady = false;
 
         if (mounted) {
           Navigator.push(
@@ -95,35 +105,34 @@ class _SkinToneCaptureCapturePageState extends State<SkinToneCapturePage> {
   }
 
   /// Fallback mock capture when camera unavailable
-  void _captureImageFallback() {
-    Future.delayed(const Duration(milliseconds: 500), () {
-      if (mounted) {
-        final mockImageBytes = _generateMockImageBytes();
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (_) => SkinToneAdjustPage(
-              imageBytes: mockImageBytes,
-            ),
-          ),
-        );
-      }
-    });
+  Future<void> _captureImageFallback() async {
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+    final mockImageBytes = await _generateMockImageBytes();
+    if (!mounted) return;
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => SkinToneAdjustPage(
+          imageBytes: mockImageBytes,
+        ),
+      ),
+    );
   }
 
   /// Generate mock image bytes for demonstration
-  Uint8List _generateMockImageBytes() {
-    // Create a simple mock image (100x100 pixels)
-    // In a real app, this would be actual camera image
-    List<int> pixels = [];
-    for (int i = 0; i < 100 * 100; i++) {
-      // Brownish/tan color for skin tone demo
-      pixels.add(210); // R
-      pixels.add(180); // G
-      pixels.add(140); // B
-      pixels.add(255); // A
-    }
-    return Uint8List.fromList(pixels);
+  Future<Uint8List> _generateMockImageBytes() async {
+    // Generate a 200x200 PNG filled with a tan color
+    const width = 200;
+    const height = 200;
+    final recorder = ui.PictureRecorder();
+    final canvas = Canvas(recorder);
+    final paint = Paint()..color = const Color.fromARGB(255, 210, 180, 140);
+    canvas.drawRect(Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()), paint);
+    final picture = recorder.endRecording();
+    final img = await picture.toImage(width, height);
+    final byteData = await img.toByteData(format: ui.ImageByteFormat.png);
+    return byteData!.buffer.asUint8List();
   }
 
   @override

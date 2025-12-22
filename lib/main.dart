@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'screens/splash_screen.dart';
-import 'screens/home_dashboard.dart';
+import 'screens/main_shell.dart';
 
 void main() {
   runApp(const GlucoseMonitorApp());
@@ -19,7 +19,8 @@ class GlucoseMonitorApp extends StatelessWidget {
       themeMode: ThemeMode.system,
       home: const SplashScreen(),
       routes: {
-        '/home': (context) => const HomeDashboard(),
+        // Route to the new shell with bottom navigation
+        '/home': (context) => const MainShell(),
       },
       debugShowCheckedModeBanner: false,
     );

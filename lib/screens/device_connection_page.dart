@@ -128,6 +128,7 @@ class _DeviceConnectionPageState extends State<DeviceConnectionPage> {
     return Scaffold(
       appBar: AppTopBar(
         title: 'BLE Device Connection',
+        showBackButton: false,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),

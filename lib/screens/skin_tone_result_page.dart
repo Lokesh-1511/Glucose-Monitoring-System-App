@@ -1,18 +1,28 @@
 import 'package:flutter/material.dart';
 import 'dart:math';
+import 'dart:math' as math;
+import 'dart:typed_data';
+import 'dart:ui' as ui;
 import '../widgets/common_widgets.dart';
 import '../services/data_storage_service.dart';
 import '../models/user_profile.dart';
+import 'skin_tone_capture_page.dart';
 
 /// Third screen in skin tone calibration flow
 /// Displays final results and saves to profile
 class SkinToneResultPage extends StatefulWidget {
-  final Color color;
+  final Uint8List imageBytes;
+  final double hue; // degrees
+  final double saturation; // scale
+  final double brightness; // percent
   final double melaninIndex;
 
   const SkinToneResultPage({
     Key? key,
-    required this.color,
+    required this.imageBytes,
+    required this.hue,
+    required this.saturation,
+    required this.brightness,
     required this.melaninIndex,
   }) : super(key: key);
 
@@ -22,6 +32,37 @@ class SkinToneResultPage extends StatefulWidget {
 
 class _SkinToneResultPageState extends State<SkinToneResultPage> {
   bool _isSaving = false;
+  bool _loading = true;
+  Color? _baseAverageColor;
+  Color? _adjustedColor;
+
+  @override
+  void initState() {
+    super.initState();
+    _initAverageFromImage();
+  }
+
+  Future<void> _initAverageFromImage() async {
+    try {
+      final codec = await ui.instantiateImageCodec(
+        widget.imageBytes,
+        targetWidth: 200,
+      );
+      final fi = await codec.getNextFrame();
+      final img = fi.image;
+      final avg = await _computeAverageColor(img);
+      final adjusted = _applyHsv(avg, widget.hue, widget.saturation, widget.brightness);
+      if (mounted) {
+        setState(() {
+          _baseAverageColor = avg;
+          _adjustedColor = adjusted;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   /// Convert RGB to Lab color space
   Map<String, double> _rgbToLab(Color color) {
@@ -59,6 +100,38 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
       'a': a.clamp(-128, 127),
       'b': labB.clamp(-128, 127),
     };
+  }
+
+  Future<Color> _computeAverageColor(ui.Image image) async {
+    final byteData = await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) return const Color(0xFFD2B48C);
+    final bytes = byteData.buffer.asUint8List();
+    final width = image.width;
+    final height = image.height;
+    final startX = (width * 0.25).floor();
+    final startY = (height * 0.25).floor();
+    final endX = (width * 0.75).floor();
+    final endY = (height * 0.75).floor();
+    int rSum = 0, gSum = 0, bSum = 0, count = 0;
+    for (int y = startY; y < endY; y += 2) {
+      for (int x = startX; x < endX; x += 2) {
+        final idx = (y * width + x) * 4;
+        final r = bytes[idx];
+        final g = bytes[idx + 1];
+        final b = bytes[idx + 2];
+        rSum += r;
+        gSum += g;
+        bSum += b;
+        count++;
+      }
+    }
+    if (count == 0) return const Color(0xFFD2B48C);
+    return Color.fromARGB(
+      255,
+      (rSum / count).round(),
+      (gSum / count).round(),
+      (bSum / count).round(),
+    );
   }
 
   /// Save melanin index to user profile
@@ -122,7 +195,8 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
 
   @override
   Widget build(BuildContext context) {
-    final lab = _rgbToLab(widget.color);
+    final adjusted = _adjustedColor ?? const Color.fromARGB(255, 210, 180, 140);
+    final lab = _rgbToLab(adjusted);
 
     return Scaffold(
       appBar: AppTopBar(
@@ -133,27 +207,31 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Color preview
+            // Image preview with applied adjustments
             Center(
               child: Column(
                 children: [
-                  Container(
-                    width: 150,
-                    height: 150,
-                    decoration: BoxDecoration(
-                      color: widget.color,
-                      borderRadius: BorderRadius.circular(12),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 10,
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: ColorFiltered(
+                      colorFilter: ColorFilter.matrix(
+                        _composeColorMatrix(
+                          hueDegrees: widget.hue,
+                          saturationScale: widget.saturation,
+                          brightnessPercent: widget.brightness,
                         ),
-                      ],
+                      ),
+                      child: Image.memory(
+                        widget.imageBytes,
+                        width: 200,
+                        height: 200,
+                        fit: BoxFit.cover,
+                      ),
                     ),
                   ),
                   const SizedBox(height: 16),
                   Text(
-                    'Captured Skin Tone',
+                    'Calibrated Skin Image',
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                 ],
@@ -161,21 +239,21 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
             ),
             const SizedBox(height: 32),
 
-            // RGB Values
+            // RGB Values from adjusted average image color
             _ResultCard(
               title: 'RGB Values',
               children: [
                 _ResultRow(
                   label: 'Red',
-                  value: widget.color.red.toString(),
+                  value: adjusted.red.toString(),
                 ),
                 _ResultRow(
                   label: 'Green',
-                  value: widget.color.green.toString(),
+                  value: adjusted.green.toString(),
                 ),
                 _ResultRow(
                   label: 'Blue',
-                  value: widget.color.blue.toString(),
+                  value: adjusted.blue.toString(),
                 ),
               ],
             ),
@@ -319,6 +397,18 @@ class _SkinToneResultPageState extends State<SkinToneResultPage> {
               label: _isSaving ? 'Saving...' : 'Save Calibration',
               isLoading: _isSaving,
               onPressed: _saveSkinTone,
+            ),
+            const SizedBox(height: 12),
+            SecondaryButton(
+              label: 'Retake Photo',
+              onPressed: () {
+                Navigator.pushReplacement(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => const SkinToneCapturePage(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 16),
             Text(
@@ -527,4 +617,106 @@ class _ResultRow extends StatelessWidget {
 
 double _pow(double base, double exponent) {
   return pow(base, exponent).toDouble();
+}
+
+// Helpers to mirror adjust-page view
+
+List<double> _composeColorMatrix({
+  required double hueDegrees,
+  required double saturationScale,
+  required double brightnessPercent,
+}) {
+  final h = hueDegrees * math.pi / 180.0;
+  final cosH = math.cos(h);
+  final sinH = math.sin(h);
+  const rW = 0.213, gW = 0.715, bW = 0.072;
+  final hue = <double>[
+    rW + cosH * (1 - rW) + sinH * (-rW), gW + cosH * (-gW) + sinH * (-gW), bW + cosH * (-bW) + sinH * (1 - bW), 0, 0,
+    rW + cosH * (-rW) + sinH * (0.143), gW + cosH * (1 - gW) + sinH * (0.140), bW + cosH * (-bW) + sinH * (-0.283), 0, 0,
+    rW + cosH * (-rW) + sinH * (-(1 - rW)), gW + cosH * (-gW) + sinH * (gW), bW + cosH * (1 - bW) + sinH * (bW), 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+  final s = saturationScale;
+  final sat = <double>[
+    rW * (1 - s) + s, gW * (1 - s), bW * (1 - s), 0, 0,
+    rW * (1 - s), gW * (1 - s) + s, bW * (1 - s), 0, 0,
+    rW * (1 - s), gW * (1 - s), bW * (1 - s) + s, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+  final v = 1.0 + (brightnessPercent / 100.0);
+  final bright = <double>[
+    v, 0, 0, 0, 0,
+    0, v, 0, 0, 0,
+    0, 0, v, 0, 0,
+    0, 0, 0, 1, 0,
+  ];
+  return _multiplyColorMatrices(_multiplyColorMatrices(bright, sat), hue);
+}
+
+List<double> _multiplyColorMatrices(List<double> a, List<double> b) {
+  final out = List<double>.filled(20, 0);
+  for (int row = 0; row < 4; row++) {
+    for (int col = 0; col < 5; col++) {
+      double sum = 0;
+      for (int k = 0; k < 4; k++) {
+        sum += a[row * 5 + k] * b[k * 5 + col];
+      }
+      if (col == 4) sum += a[row * 5 + 4];
+      out[row * 5 + col] = sum;
+    }
+  }
+  return out;
+}
+
+Color _applyHsv(Color base, double hue, double saturation, double brightness) {
+  double r = base.red / 255.0;
+  double g = base.green / 255.0;
+  double b = base.blue / 255.0;
+  final maxc = [r, g, b].reduce((a, b) => a > b ? a : b);
+  final minc = [r, g, b].reduce((a, b) => a < b ? a : b);
+  double h = 0.0;
+  double s = maxc == 0 ? 0.0 : (maxc - minc) / maxc;
+  final v = maxc;
+  if (minc != maxc) {
+    final rc = (maxc - r) / (maxc - minc);
+    final gc = (maxc - g) / (maxc - minc);
+    final bc = (maxc - b) / (maxc - minc);
+    if (r == maxc) {
+      h = bc - gc;
+    } else if (g == maxc) {
+      h = 2.0 + rc - bc;
+    } else {
+      h = 4.0 + gc - rc;
+    }
+    h = (h / 6.0) % 1.0;
+  }
+  final newH = ((h * 360.0 + hue) % 360.0);
+  final newS = (s * saturation).clamp(0.0, 1.0);
+  final newV = (v + (brightness / 100.0)).clamp(0.0, 1.0);
+  return _hsvaToColor(newH, newS, newV, 1.0);
+}
+
+Color _hsvaToColor(double h, double s, double v, double a) {
+  h = (h % 360) / 60.0;
+  int i = h.toInt();
+  double f = h - i;
+  double p = v * (1.0 - s);
+  double q = v * (1.0 - s * f);
+  double t = v * (1.0 - s * (1.0 - f));
+  double r, g, b;
+  switch (i) {
+    case 0:
+      r = v; g = t; b = p; break;
+    case 1:
+      r = q; g = v; b = p; break;
+    case 2:
+      r = p; g = v; b = t; break;
+    case 3:
+      r = p; g = q; b = v; break;
+    case 4:
+      r = t; g = p; b = v; break;
+    default:
+      r = v; g = p; b = q; break;
+  }
+  return Color.fromARGB((a * 255).toInt(), (r * 255).toInt(), (g * 255).toInt(), (b * 255).toInt());
 }
